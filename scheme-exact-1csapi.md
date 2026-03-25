@@ -123,9 +123,9 @@ This design collapses what would otherwise be a two-phase flow into a **single-p
 
 1. **Client → Resource Server**: Client makes an HTTP request (e.g., `GET /resource`) without payment headers.
 
-2. **Resource Server → Facilitator**: The resource server's x402 middleware invokes the facilitator to construct `PaymentRequirements`. The facilitator calls the 1Click API with `dry: false` and the merchant's swap configuration (origin asset, destination asset, amount, recipient address, refund policy, fees).
+2. **Resource Server → Facilitator**: The resource server's x402 middleware invokes the facilitator to construct `PaymentRequirements`. The facilitator calls the 1Click API `quote` endpoint with `dry: false` and the merchant's swap configuration (origin asset, destination asset, amount, recipient address, refund policy, fees).
 
-3. **Facilitator → 1Click API**: `POST /v0/quote` with `dry: false` returns the full wet quote including a unique `depositAddress`, `depositMemo` (if applicable), `amountIn`, `minAmountIn`, `amountOut`, `deadline`, and `timeEstimate`.
+3. **Facilitator → 1Click API**: `POST /v0/quote` with `dry: false` and `swapType: EXACT_OUTPUT` returns the full wet quote including a unique `depositAddress`, `depositMemo` (if applicable), `maxAmountIn`, `amountOut`, `deadline`, and `timeEstimate`.
 
 4. **Resource Server → Client**: The resource server responds `402 Payment Required` with the `PaymentRequirements` object. Critically, `payTo` is set to the 1Click `depositAddress`. The `extra` field embeds all quote metadata the client needs: the origin asset, required deposit amount, deposit memo (if any), and the quote deadline.
 
@@ -166,24 +166,12 @@ This design collapses what would otherwise be a two-phase flow into a **single-p
     "minAmountIn": "1000000",              // Minimum accepted deposit (from 1Click quote)
     "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
                                             // What the merchant receives
-    "destinationChain": "near",            // Where the merchant receives
-    "merchantWallet": "merchant.near",     // Merchant's final destination wallet
     "amountOut": "1000000",                // Expected output to merchant (informational)
-    "amountOutFormatted": "1.00",
-    "amountInFormatted": "1.005",
-    "amountInUsd": "1.005",
     "slippageTolerance": 100,              // Basis points (100 = 1%)
-    "swapType": "EXACT_OUTPUT",            // EXACT_INPUT | EXACT_OUTPUT
-    "depositType": "ORIGIN_CHAIN",         // 1Click depositType
-    "recipientType": "DESTINATION_CHAIN",  // 1Click recipientType
     "deadline": "2026-03-25T15:10:00Z",    // Quote expiry (from 1Click)
     "timeEstimate": 120,                   // Estimated swap time in seconds
     "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317",
                                             // Pre-configured refund address (set by client registration or default)
-    "appFees": [                           // Fee distribution (optional)
-      { "recipient": "x402facilitator.near", "fee": 10 }
-    ],
-    "apiBaseUrl": "https://1click.chaindefuser.com"
   }
 }
 ```
@@ -194,12 +182,10 @@ This design collapses what would otherwise be a two-phase flow into a **single-p
 |---|---|---|
 | `scheme` | — | Always `"exact"`. |
 | `network` | — | Always `"near:mainnet"` — the NEAR Intents settlement layer. |
-| `amount` | `quote.amountIn` | The **deposit amount** the client must send on the origin chain, in the smallest unit of the origin asset. |
+| `amount` | `quote.maxAmountIn` | The **deposit amount** the client must send on the origin chain. |
 | `asset` | Request `originAsset` | The **origin asset** identifier (`defuse_asset_identifier`). This is what the client is paying with. |
 | `payTo` | `quote.depositAddress` | The **1Click deposit address** on the origin chain. The client sends tokens here. |
 | `maxTimeoutSeconds` | `deadline` − now + buffer | Max time the resource server will wait for full settlement. |
-
-> **Note on `amount` and `asset` semantics**: In the EVM/SVM `exact` schemes, `amount` and `asset` refer to the *destination* — what the merchant receives. In this scheme, they refer to the *origin* — what the client must deposit. This is because `payTo` is the deposit address on the origin chain, so `amount` must express what is sent *to* that address. The merchant's destination asset and amount are in `extra.destinationAsset` and `extra.amountOut`.
 
 ### 3.2 Extra Field Descriptions
 
@@ -209,22 +195,12 @@ This design collapses what would otherwise be a two-phase flow into a **single-p
 | `originChain` | string | Yes | Short chain identifier where the `payTo` deposit address lives (e.g., `"arb"`, `"eth"`, `"sol"`, `"btc"`, `"near"`). |
 | `depositMemo` | string \| null | Yes | Deposit memo if required by the origin chain (e.g., Stellar). `null` if not needed. |
 | `minAmountIn` | string | Yes | Minimum deposit amount accepted by the 1Click quote. Deposits below this are refunded. |
-| `destinationAsset` | string | Yes | The asset the merchant receives, in `defuse_asset_identifier` format. |
-| `destinationChain` | string | Yes | Short chain identifier where the merchant receives funds. |
-| `merchantWallet` | string | Yes | The merchant's wallet address on the destination chain. |
 | `amountOut` | string | Yes | Expected output amount to the merchant (in smallest unit of destination asset). |
-| `amountOutFormatted` | string | Yes | Human-readable output amount. |
-| `amountInFormatted` | string | Yes | Human-readable deposit amount. |
-| `amountInUsd` | string | Yes | USD-equivalent of the deposit amount (display only). |
 | `slippageTolerance` | integer | Yes | Slippage tolerance in basis points. |
-| `swapType` | string | Yes | `"EXACT_INPUT"` or `"EXACT_OUTPUT"`. |
 | `depositType` | string | Yes | 1Click deposit type: `"ORIGIN_CHAIN"` or `"INTENTS"`. |
-| `recipientType` | string | Yes | 1Click recipient type: `"DESTINATION_CHAIN"` or `"INTENTS"`. |
 | `deadline` | string (ISO 8601) | Yes | Quote expiry timestamp from 1Click. Client MUST deposit before this time. |
 | `timeEstimate` | integer | Yes | Estimated swap completion time in seconds (from 1Click). |
 | `refundTo` | string | Yes | Address on the origin chain where funds are refunded if the swap fails. |
-| `appFees` | array | No | Fee distribution: `[{ "recipient": "<near_addr>", "fee": <bps> }]`. |
-| `apiBaseUrl` | string | Yes | 1Click API base URL. Default: `"https://1click.chaindefuser.com"`. |
 
 ---
 
@@ -270,7 +246,7 @@ When the resource server needs to construct a `402 Payment Required` response, i
      "originAsset": "<configured origin asset>",
      "destinationAsset": "<merchant's destination asset>",
      "amount": "<merchant's desired output amount>",
-     "swapType": "EXACT_OUTPUT",          // or EXACT_INPUT
+     "swapType": "EXACT_OUTPUT", 
      "slippageTolerance": 100,
      "depositType": "ORIGIN_CHAIN",
      "recipientType": "DESTINATION_CHAIN",
@@ -458,20 +434,10 @@ Scenario: A merchant sells premium API access for 1 USDC. The merchant accepts p
       "destinationChain": "near",
       "merchantWallet": "merchant.near",
       "amountOut": "1000000",
-      "amountOutFormatted": "1.00",
-      "amountInFormatted": "1.005",
-      "amountInUsd": "1.005",
       "slippageTolerance": 100,
-      "swapType": "EXACT_OUTPUT",
-      "depositType": "ORIGIN_CHAIN",
-      "recipientType": "DESTINATION_CHAIN",
       "deadline": "2026-03-25T15:10:00Z",
       "timeEstimate": 120,
       "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317",
-      "appFees": [
-        { "recipient": "x402facilitator.near", "fee": 10 }
-      ],
-      "apiBaseUrl": "https://1click.chaindefuser.com"
     }
   }
 }
