@@ -580,8 +580,8 @@ The 1Click deposit address is valid until the `deadline` (typically configurable
 
 The `refundTo` address in the 1Click quote determines where failed swaps are refunded. There are two strategies:
 
-- **Client-provided**: The resource server collects the client's refund address (e.g., via a registration step or a pre-flight request) and includes it in the quote. This is more flexible but requires an extra round-trip.
-- **Facilitator-default**: The facilitator uses a default refund address (e.g., a custodial address that the facilitator manages, later disbursing refunds to clients). This is simpler but introduces custodial risk.
+- **Client-provided**: The resource server collects the client's refund address (e.g., via a registration step or a pre-flight request) and includes it in the quote. 
+- **Facilitator-default**: The facilitator uses a default refund address (e.g., a custodial address that the facilitator manages, later disbursing refunds to clients).
 
 > **Recommendation**: For production deployments, use a pre-registration flow where the client provides their refund address before the 402 handshake, OR allow the `refundTo` to be the same as `clientAddress` (the client's origin wallet).
 
@@ -594,4 +594,21 @@ When the resource server supports multiple origin chains, it SHOULD pre-generate
 AI agents and automated clients can interact with this scheme without modification to the standard x402 client flow:
 
 1. Agent receives 402 → parses `PaymentRequirements` → identifies `extra.originChain` and `payTo`.
-2. Agent constructs and signs a native chain trans
+2. Agent constructs and signs a native chain transaction (using its wallet) to send `amount` to `payTo`.
+3. Agent submits the transaction, obtains `txHash`.
+4. Agent re-requests with `X-PAYMENT` header containing the `txHash`.
+5. Agent receives 200 + resource.
+
+This is fully compatible with existing x402 agent SDKs — the agent only needs to add support for constructing origin-chain deposit transactions (instead of EIP-3009 signatures).
+
+---
+
+## 13. References
+
+- [x402 Protocol Specification (v2)](https://github.com/coinbase/x402/blob/main/specs/x402-specification.md)
+- [x402 `exact` Scheme — EVM](https://github.com/coinbase/x402/blob/main/specs/schemes/exact/scheme_exact_evm.md)
+- [x402 `exact` Scheme — SVM](https://github.com/coinbase/x402/blob/main/specs/schemes/exact/scheme_exact_svm.md)
+- [1Click API Reference](https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-api)
+- [NEAR Intents Supported Chains](https://docs.near-intents.org/resources/chain-support)
+- [CAIP-2: Blockchain ID Specification](https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-2.md)
+- [1Click TypeScript SDK](https://github.com/defuse-protocol/one-click-sdk-typescript)
