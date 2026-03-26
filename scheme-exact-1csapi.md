@@ -13,7 +13,7 @@
 
 ## 1. Overview
 
-This document specifies the `exact` payment scheme for the x402 protocol using the [NEAR Intents 1Click Swap API](https://docs.near-intents.org/integration/distribution-channels/1click-api/about-1click-api) as the settlement backend. This scheme facilitates cross-chain payments where a client pays a maximum amount of a source asset on any [supported origin chain](https://docs.near-intents.org/resources/chain-support), and the resource server (merchant) receives an exact amount of a destination asset on any supported destination chain — with the NEAR Intents solver network executing the cross-chain swap in between.
+This document specifies the `exact` payment scheme for the x402 protocol using the [NEAR Intents 1Click Swap API](https://docs.near-intents.org/integration/distribution-channels/1click-api/about-1click-api) as the settlement backend. This scheme facilitates cross-chain payments where a client pays a specified amount of a source asset on any [supported origin chain](https://docs.near-intents.org/resources/chain-support), and the resource server (merchant) receives an exact amount of a destination asset on any supported destination chain — with the NEAR Intents solver network executing the cross-chain swap in between.
 
 ### 1.1 Core Design: `payTo` = Deposit Address
 
