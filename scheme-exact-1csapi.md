@@ -13,7 +13,7 @@
 
 ## 1. Overview
 
-This document specifies the `exact` payment scheme for the x402 protocol using the [NEAR Intents 1Click Swap API](https://docs.near-intents.org/integration/distribution-channels/1click-api/about-1click-api) as the settlement backend. This scheme facilitates cross-chain payments where a client pays an exact amount of a source asset on any [supported origin chain](https://docs.near-intents.org/resources/chain-support), and the resource server (merchant) receives an exact amount of a destination asset on any supported destination chain — with the NEAR Intents solver network executing the cross-chain swap in between.
+This document specifies the `exact` payment scheme for the x402 protocol using the [NEAR Intents 1Click Swap API](https://docs.near-intents.org/integration/distribution-channels/1click-api/about-1click-api) as the settlement backend. This scheme facilitates cross-chain payments where a client pays a maximum amount of a source asset on any [supported origin chain](https://docs.near-intents.org/resources/chain-support), and the resource server (merchant) receives an exact amount of a destination asset on any supported destination chain — with the NEAR Intents solver network executing the cross-chain swap in between.
 
 ### 1.1 Core Design: `payTo` = Deposit Address
 
@@ -22,17 +22,15 @@ The key architectural insight of this scheme is that the `payTo` field in `Payme
 - The resource server generates the quote **at 402 response time**, embedding the live `depositAddress` as `payTo`.
 - The client's only obligation is to transfer the exact required amount to that `payTo` address on the origin chain — identical in spirit to how the EVM `exact` scheme asks the client to authorize a transfer to a `payTo` address.
 - The client's `payload` contains the origin-chain transaction hash (`txHash`) as proof-of-deposit — analogous to the EIP-3009 `signature` in the EVM scheme.
-- The facilitator verifies the deposit and polls the 1Click status API for settlement — no second round-trip required.
-
-This design collapses what would otherwise be a two-phase flow into a **single-phase x402 payment**, fully compatible with the standard x402 protocol flow.
+- The facilitator verifies the deposit and polls the 1Click status API for settlement.
 
 ### 1.2 Key Properties
 
-- **Single-phase x402 flow**: Client receives 402 → sends `X-PAYMENT` with `txHash` → receives resource. No intermediate negotiation step.
+- **x402 flow**: Client receives 402 → sends `X-PAYMENT` with `txHash` → receives resource. No intermediate negotiation step.
 - **Cross-chain native**: Client pays in any supported asset on any origin chain (ETH, BTC, SOL, USDC on Arbitrum, etc.); the merchant receives the destination asset on any supported chain.
 - **Gasless for the merchant**: The resource server receives destination tokens without submitting any on-chain transaction.
 - **Competitive pricing**: Market makers compete on the 1Click solver network to provide the best swap rate.
-- **Automatic refunds**: If the swap cannot be completed, the 1Click API automatically returns funds to the client's refund address.
+- **Automatic refunds**: If the swap cannot be completed, the 1Click API automatically returns funds to the refund address.
 - **Time-bounded**: Deposit addresses have a `deadline` / `timeWhenInactive` (typically ~10 minutes). The `maxTimeoutSeconds` in `PaymentRequirements` is calibrated accordingly.
 
 ---
@@ -55,7 +53,7 @@ This design collapses what would otherwise be a two-phase flow into a **single-p
     │                      │                           │─────────────────────>│
     │                      │                           │  quote response with │
     │                      │                           │  depositAddress,     │
-    │                      │                           │  amountIn, deadline  │
+    │                      │                           │ maxAmountIn...       │
     │                      │                           │<─────────────────────│
     │                      │  PaymentRequirements      │                      │
     │                      │  (payTo=depositAddress)   │                      │
@@ -200,7 +198,7 @@ This design collapses what would otherwise be a two-phase flow into a **single-p
 | `depositType` | string | Yes | 1Click deposit type: `"ORIGIN_CHAIN"` or `"INTENTS"`. |
 | `deadline` | string (ISO 8601) | Yes | Quote expiry timestamp from 1Click. Client MUST deposit before this time. |
 | `timeEstimate` | integer | Yes | Estimated swap completion time in seconds (from 1Click). |
-| `refundTo` | string | Yes | Address on the origin chain where funds are refunded if the swap fails. |
+| `refundTo` | string | Yes | Address on the origin chain where funds are refunded if the swap fails or exceess exist. |
 
 ---
 
@@ -362,7 +360,6 @@ State SHOULD be garbage-collected after `deadline` + `maxTimeoutSeconds` + grace
 | Relationship | Trust Required | Comparable To |
 |---|---|---|
 | Client → 1Click deposit address | Client trusts 1Click to either complete the swap or refund | User trusting Stripe/PayPal with payment |
-| Facilitator → 1Click API | Facilitator trusts 1Click to report status honestly | Resource server trusting a payment gateway |
 | Resource server → Facilitator | Standard x402 trust model | Same as EVM/SVM schemes |
 
 Unlike the EVM/SVM `exact` schemes where settlement is **trustless** (the on-chain contract enforces transfer constraints), this scheme relies on the **1Click backend and NEAR Intents solver network** to faithfully execute the swap. The `refundTo` mechanism provides a safety net: if the swap cannot be completed, the 1Click system automatically refunds the client.
@@ -383,7 +380,7 @@ Unlike the EVM/SVM `exact` schemes where settlement is **trustless** (the on-cha
 
 - The facilitator SHOULD verify (on-chain or via 1Click status) that the deposited amount is ≥ `extra.minAmountIn`.
 - Deposits below `minAmountIn` result in the 1Click status `INCOMPLETE_DEPOSIT` and are refunded.
-- Deposits above `amountIn` are processed normally; excess may be refunded depending on `swapType`.
+- Deposits above `minAmountIn` are processed normally and excess may be refunded.
 
 ### 6.5 Deposit Address Authenticity
 
@@ -431,8 +428,6 @@ Scenario: A merchant sells premium API access for 1 USDC. The merchant accepts p
       "depositMemo": null,
       "minAmountIn": "1000000",
       "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
-      "destinationChain": "near",
-      "merchantWallet": "merchant.near",
       "amountOut": "1000000",
       "slippageTolerance": 100,
       "deadline": "2026-03-25T15:10:00Z",
