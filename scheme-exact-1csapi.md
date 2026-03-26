@@ -68,7 +68,7 @@ The key architectural insight of this scheme is that the `payTo` field in `Payme
     │                      │                           │                      │
     │  5. Client reviews   │                           │                      │
     │     terms: origin    │                           │                      │
-    │     asset, amountIn, │                           │                      │
+    │  asset, maxAmountin, │                           │                      │
     │     destination,     │                           │                      │
     │     deadline         │                           │                      │
     │                      │                           │                      │
@@ -107,8 +107,8 @@ The key architectural insight of this scheme is that the `payTo` field in `Payme
     │                      │                           │<─────────────────────│
     │                      │                           │                      │
     │                      │  SettlementResponse       │                      │
-    │                      │  (success, intentHashes,  │                      │
-    │                      │   destinationTxHashes)    │                      │
+    │                      │  (success,                │                      │
+    │                      │ destinationChainTxHashes) │                      │
     │                      │<──────────────────────────│                      │
     │                      │                           │                      │
     │  12. 200 OK          │                           │                      │
@@ -152,8 +152,7 @@ The key architectural insight of this scheme is that the `payTo` field in `Payme
   "scheme": "exact",
   "network": "near:mainnet",
   "amount": "1005000",                     // Deposit amount the client must send (in smallest unit of origin asset)
-  "asset": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
-                                            // Origin asset the client pays WITH (defuse_asset_identifier)
+  "asset": "arb",                          // Origin asset the client pays WITH (CAIP-2 or contract address)
   "payTo": "0x76b4c56085ED136a8744D52bE956396624a730E8",
                                             // 1Click deposit address (on the origin chain)
   "maxTimeoutSeconds": 300,
@@ -168,7 +167,7 @@ The key architectural insight of this scheme is that the `payTo` field in `Payme
     "slippageTolerance": 100,              // Basis points (100 = 1%)
     "deadline": "2026-03-25T15:10:00Z",    // Quote expiry (from 1Click)
     "timeEstimate": 120,                   // Estimated swap time in seconds
-    "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317",
+    "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317"
                                             // Pre-configured refund address (set by client registration or default)
   }
 }
@@ -181,7 +180,7 @@ The key architectural insight of this scheme is that the `payTo` field in `Payme
 | `scheme` | — | Always `"exact"`. |
 | `network` | — | Always `"near:mainnet"` — the NEAR Intents settlement layer. |
 | `amount` | `quote.maxAmountIn` | The **deposit amount** the client must send on the origin chain. |
-| `asset` | Request `originAsset` | The **origin asset** identifier (`defuse_asset_identifier`). This is what the client is paying with. |
+| `asset` | Request `originAsset` | The **origin asset** identifier as CAIP-2 identifier  or contract address). This is what the client is paying with. |
 | `payTo` | `quote.depositAddress` | The **1Click deposit address** on the origin chain. The client sends tokens here. |
 | `maxTimeoutSeconds` | `deadline` − now + buffer | Max time the resource server will wait for full settlement. |
 
@@ -195,7 +194,6 @@ The key architectural insight of this scheme is that the `payTo` field in `Payme
 | `minAmountIn` | string | Yes | Minimum deposit amount accepted by the 1Click quote. Deposits below this are refunded. |
 | `amountOut` | string | Yes | Expected output amount to the merchant (in smallest unit of destination asset). |
 | `slippageTolerance` | integer | Yes | Slippage tolerance in basis points. |
-| `depositType` | string | Yes | 1Click deposit type: `"ORIGIN_CHAIN"` or `"INTENTS"`. |
 | `deadline` | string (ISO 8601) | Yes | Quote expiry timestamp from 1Click. Client MUST deposit before this time. |
 | `timeEstimate` | integer | Yes | Estimated swap completion time in seconds (from 1Click). |
 | `refundTo` | string | Yes | Address on the origin chain where funds are refunded if the swap fails or exceess exist. |
@@ -307,12 +305,11 @@ When the facilitator receives a `PaymentPayload`:
    {
      "success": true,
      "network": "near:mainnet",
-     "transaction": "<intentHashes from 1Click status>",
+     "transaction": "<destinationChainTxHashes from 1Click status>",
      "payer": "<payload.clientAddress>",
      "extra": {
        "depositAddress": "<depositAddress>",
        "originTxHash": "<payload.txHash>",
-       "destinationTxHashes": ["0xabc..."],
        "nearTxHashes": ["6XqqDwoa...", "EVcgKukw..."],
        "amountInFormatted": "1.005",
        "amountOutFormatted": "1.00",
@@ -419,7 +416,7 @@ Scenario: A merchant sells premium API access for 1 USDC. The merchant accepts p
     "scheme": "exact",
     "network": "near:mainnet",
     "amount": "1005000",
-    "asset": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+    "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Arbitrum
     "payTo": "0x76b4c56085ED136a8744D52bE956396624a730E8",
     "maxTimeoutSeconds": 300,
     "extra": {
@@ -468,7 +465,7 @@ After the client sends USDC on Arbitrum to the deposit address:
   "extra": {
     "depositAddress": "0x76b4c56085ED136a8744D52bE956396624a730E8",
     "originTxHash": "0x9bcff372aee89b648c922b850573b22387c31d693079f5e37cd255814e2d615a",
-    "destinationTxHashes": ["BmHf4y7k9PqRz..."],
+    "destinationChainTxHashes": ["BmHf4y7k9PqRz..."],
     "nearTxHashes": [
       "6XqqDwoaopgg39QsEiFGs9HfwP2Vum9tCCyqHDYXWBBH",
       "EVcgKukwf38XsYcgvkEgiMPWR7qwLfLK5rsVtjgctPBn"
@@ -494,7 +491,7 @@ A resource server MAY advertise multiple `PaymentRequirements` in its 402 respon
       "scheme": "exact",
       "network": "near:mainnet",
       "amount": "1005000",
-      "asset": "nep141:arb-0xaf88...omft.near",   // USDC on Arbitrum
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",   // USDC on Arbitrum
       "payTo": "0x76b4c560...",                     // Arbitrum deposit address
       "maxTimeoutSeconds": 300,
       "extra": { "originChain": "arb", /* ... */ }
@@ -503,7 +500,7 @@ A resource server MAY advertise multiple `PaymentRequirements` in its 402 respon
       "scheme": "exact",
       "network": "near:mainnet",
       "amount": "1005000",
-      "asset": "nep141:eth-0xa0b8...omft.near",   // USDC on Ethereum
+      "asset": "0x036CbD53842c5423634e7929541eC2318f3dCF7e",   // USDC on Ethereum
       "payTo": "0xA1B2C3D4...",                     // Ethereum deposit address
       "maxTimeoutSeconds": 600,
       "extra": { "originChain": "eth", /* ... */ }
@@ -512,7 +509,7 @@ A resource server MAY advertise multiple `PaymentRequirements` in its 402 respon
       "scheme": "exact",
       "network": "near:mainnet",
       "amount": "38000",
-      "asset": "nep141:btc-satoshi...omft.near",  // BTC
+      "asset": "BTC",  // BTC
       "payTo": "bc1qxy2kgd...",                    // Bitcoin deposit address
       "maxTimeoutSeconds": 3600,
       "extra": { "originChain": "btc", /* ... */ }
