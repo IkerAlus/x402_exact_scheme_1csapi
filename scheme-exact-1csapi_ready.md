@@ -1,4 +1,4 @@
-# `exact` Scheme — NEAR Intents 1Click Swap API
+# `exact` Scheme for NEAR Intents
 
 ## Summary
 
