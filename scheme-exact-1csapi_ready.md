@@ -144,6 +144,39 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
 }
 ```
 
+and the full `paymentRequirements` object:
+
+```json
+{
+  "x402Version": 2,
+  "resource": {
+    "url": "https://api.example.com/premium-data",
+    "description": "Cross-chain premium market data access",
+    "mimeType": "application/json"
+  },
+  "accepted": {
+    "scheme": "exact",
+    "network": "near:mainnet",
+    "amount": "1005000",
+    "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Arbitrum
+    "payTo": "0x76b4c56085ED136a8744D52bE956396624a730E8",
+    "maxTimeoutSeconds": 300,
+    "extra": {
+      "assetTransferMethod": "1click-swap",
+      "originChain": "arb",
+      "depositMemo": null,
+      "minAmountIn": "1000000",
+      "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "amountOut": "1000000",
+      "slippageTolerance": 100,
+      "deadline": "2026-03-25T15:10:00Z",
+      "timeEstimate": 120,
+      "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317",
+    }
+  }
+}
+```
+
 ### Mapping to Standard x402 Fields
 
 | x402 Field | 1Click Source | Semantics in This Scheme |
@@ -391,85 +424,6 @@ In addition to standard x402 error codes:
 | Token/asset discovery | `GET /v0/tokens` | Initial configuration |
 | Deposit notification | `POST /v0/deposit/submit` | Facilitator `/settle` |
 | Status polling | `GET /v0/status` | Facilitator `/settle` — poll until terminal |
-
-### Full Example
-
-**PaymentRequirements (402 Response)**
-
-Scenario: A merchant sells premium API access for 1 USDC. The merchant accepts payment in USDC on Arbitrum and receives USDC on NEAR.
-
-```json
-{
-  "x402Version": 2,
-  "resource": {
-    "url": "https://api.example.com/premium-data",
-    "description": "Cross-chain premium market data access",
-    "mimeType": "application/json"
-  },
-  "accepted": {
-    "scheme": "exact",
-    "network": "near:mainnet",
-    "amount": "1005000",
-    "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Arbitrum
-    "payTo": "0x76b4c56085ED136a8744D52bE956396624a730E8",
-    "maxTimeoutSeconds": 300,
-    "extra": {
-      "assetTransferMethod": "1click-swap",
-      "originChain": "arb",
-      "depositMemo": null,
-      "minAmountIn": "1000000",
-      "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
-      "amountOut": "1000000",
-      "slippageTolerance": 100,
-      "deadline": "2026-03-25T15:10:00Z",
-      "timeEstimate": 120,
-      "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317",
-    }
-  }
-}
-```
-
-**PaymentPayload (X-PAYMENT Header)**
-
-After the client sends USDC on Arbitrum to the deposit address:
-
-```json
-{
-  "x402Version": 2,
-  "scheme": "exact",
-  "network": "near:mainnet",
-  "payload": {
-    "txHash": "0x9bcff372aee89b648c922b850573b22387c31d693079f5e37cd255814e2d615a",
-    "depositAddress": "0x76b4c56085ED136a8744D52bE956396624a730E8",
-    "depositMemo": null,
-    "originChain": "arb",
-    "clientAddress": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317"
-  }
-}
-```
-
-**SettlementResponse (X-PAYMENT-RESPONSE Header)**
-
-```json
-{
-  "success": true,
-  "network": "near:mainnet",
-  "transaction": "GnGk38hvi92tTWDYMMS8CWYnVT4fixmfBrnqSErCDMTu",
-  "payer": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317",
-  "extra": {
-    "depositAddress": "0x76b4c56085ED136a8744D52bE956396624a730E8",
-    "originTxHash": "0x9bcff372aee89b648c922b850573b22387c31d693079f5e37cd255814e2d615a",
-    "destinationChainTxHashes": ["BmHf4y7k9PqRz..."],
-    "nearTxHashes": [
-      "6XqqDwoaopgg39QsEiFGs9HfwP2Vum9tCCyqHDYXWBBH",
-      "EVcgKukwf38XsYcgvkEgiMPWR7qwLfLK5rsVtjgctPBn"
-    ],
-    "amountInFormatted": "1.005",
-    "amountOutFormatted": "1.00",
-    "status": "SUCCESS"
-  }
-}
-```
 
 ### Trust Model
 
