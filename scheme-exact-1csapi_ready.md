@@ -177,10 +177,26 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
   "payload": {
     "txHash": "0x9bcff372aee89b648c922b850573b22387c31d693079f5e37cd255814e2d615a",
     "depositAddress": "0x76b4c56085ED136a8744D52bE956396624a730E8",
-    "depositMemo": "1111111",
+    "depositMemo": "null",
     "originChain": "arb",
     "clientAddress": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317"
   }
+```
+and the full `PaymentPayload` object:
+
+```json
+{
+  "x402Version": 2,
+  "scheme": "exact",
+  "network": "near:mainnet",
+  "payload": {
+    "txHash": "0x9bcff372aee89b648c922b850573b22387c31d693079f5e37cd255814e2d615a",
+    "depositAddress": "0x76b4c56085ED136a8744D52bE956396624a730E8",
+    "depositMemo": null,
+    "originChain": "arb",
+    "clientAddress": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317"
+  }
+}
 ```
 
 ### Field Descriptions
@@ -245,6 +261,7 @@ When the facilitator receives a `PaymentPayload`:
    {
      "isValid": true,
      "invalidReason": null
+     "payer": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317"
    }
    ```
 
@@ -270,7 +287,7 @@ When the facilitator receives a `PaymentPayload`:
      "network": "near:mainnet",
      "transaction": "<destinationChainTxHashes from 1Click status>",
      "payer": "<payload.clientAddress>",
-     "extra": {
+     "exteonsions": {
        "depositAddress": "<depositAddress>",
        "originTxHash": "<payload.txHash>",
        "nearTxHashes": ["6XqqDwoa...", "EVcgKukw..."],
@@ -287,7 +304,7 @@ When the facilitator receives a `PaymentPayload`:
      "success": false,
      "network": "near:mainnet",
      "error": "<error_code>",
-     "extra": {
+     "extensions": {
        "depositAddress": "<depositAddress>",
        "status": "<terminal status from 1Click>",
        "refundTo": "<extra.refundTo>"
