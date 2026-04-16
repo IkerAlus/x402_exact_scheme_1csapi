@@ -132,14 +132,12 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
     "originChain": "arb",                  // Short chain ID where payTo lives
     "depositMemo": "1111111",              // Required if present in quote (e.g. Stellar); null otherwise
     "minAmountIn": "1000000",              // Minimum accepted deposit (from 1Click quote)
-    "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
-                                            // What the merchant receives
+    "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",  // What the merchant receives
     "amountOut": "1000000",                // Expected output to merchant (informational)
     "slippageTolerance": 100,              // Basis points (100 = 1%)
     "deadline": "2026-03-25T15:10:00Z",    // Quote expiry (from 1Click)
     "timeEstimate": 120,                   // Estimated swap time in seconds
-    "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317"
-                                            // Pre-configured refund address (set by client registration or default)
+    "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317" // Pre-configured refund address (set by client registration or default)                       
   }
 }
 ```
@@ -171,7 +169,7 @@ and the full `paymentRequirements` object:
       "slippageTolerance": 100,
       "deadline": "2026-03-25T15:10:00Z",
       "timeEstimate": 120,
-      "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317",
+      "refundTo": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317"
     }
   }
 }
@@ -293,7 +291,7 @@ When the facilitator receives a `PaymentPayload`:
    ```jsonc
    {
      "isValid": true,
-     "invalidReason": null
+     "invalidReason": null,
      "payer": "0x2527D02599Ba641c19FEa793cD0F9a6e8457C317"
    }
    ```
