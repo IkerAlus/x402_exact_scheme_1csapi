@@ -222,7 +222,7 @@ When the resource server needs to construct a `402 Payment Required` response, i
 2. Validates the quote response has a `depositAddress` and reasonable pricing.
 3. Constructs the `PaymentRequirements` with `payTo = quote.depositAddress` and embeds all quote metadata in `extra`.
 
-> **Important**: Because the quote generates a time-limited deposit address, the resource server SHOULD cache the `PaymentRequirements` for the duration of the quote's `deadline` and serve the same `depositAddress` for repeated 402 responses to the same resource, regenerating only when the deadline expires.
+> **Note**: Because the quote generates a time-limited deposit address, the resource server SHOULD cache the `PaymentRequirements` for the duration of the quote's `deadline` and serve the same `depositAddress` for repeated 402 responses to the same resource, regenerating only when the deadline expires.
 
 ### Verification (`POST /verify`)
 
@@ -239,9 +239,6 @@ When the facilitator receives a `PaymentPayload`:
 
 3. **On-chain verification** (RECOMMENDED but optional):
    - Query the origin chain's RPC/explorer to confirm the `txHash` is a confirmed transaction that transfers ≥ `paymentRequirements.extra.minAmountIn` of the correct token to the `depositAddress`.
-   - For EVM chains: verify the `Transfer` event log.
-   - For NEAR: verify the `ft_transfer` receipt.
-   - For Bitcoin/UTXO chains: verify the output to the deposit address.
 
 4. **Return `VerifyResponse`**:
    ```jsonc
@@ -364,13 +361,8 @@ In addition to standard x402 error codes:
 
 ## References
 
-- [x402 Protocol Specification (v2)](https://github.com/coinbase/x402/blob/main/specs/x402-specification.md)
-- [x402 `exact` Scheme — EVM](https://github.com/coinbase/x402/blob/main/specs/schemes/exact/scheme_exact_evm.md)
-- [x402 `exact` Scheme — SVM](https://github.com/coinbase/x402/blob/main/specs/schemes/exact/scheme_exact_svm.md)
 - [1Click API Reference](https://docs.near-intents.org/near-intents/integration/distribution-channels/1click-api)
 - [NEAR Intents Supported Chains](https://docs.near-intents.org/resources/chain-support)
-- [CAIP-2: Blockchain ID Specification](https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-2.md)
-- [1Click TypeScript SDK](https://github.com/defuse-protocol/one-click-sdk-typescript)
 
 ## Appendix
 
