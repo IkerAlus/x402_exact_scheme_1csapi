@@ -37,24 +37,19 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
     │   quote metadata)    │                           │                      │
     │<─────────────────────│                           │                      │
     │                      │                           │                      │
-    │  5. Client reviews   │                           │                      │
-    │     terms: origin    │                           │                      │
-    │  asset, maxAmountin, │                           │                      │
-    │     destination,     │                           │                      │
-    │     deadline         │                           │                      │
     │                      │                           │                      │
-    │  6. Client sends     │                           │                      │
+    │  5. Client sends     │                           │                      │
     │     deposit TX on    │                           │                      │
     │     origin chain     │                           │                      │
     │     to payTo address │                           │                      │
     │  ════════════════════╪═══════════════════════════╪══(on-chain TX)═══════│
     │                      │                           │                      │
-    │  7. GET /resource    │                           │                      │
+    │  6. GET /resource    │                           │                      │
     │  X-PAYMENT: {payload │                           │                      │
     │   with txHash}       │                           │                      │
     │─────────────────────>│                           │                      │
     │                      │                           │                      │
-    │                      │  8. POST /verify          │                      │
+    │                      │  7. POST /verify          │                      │
     │                      │──────────────────────────>│                      │
     │                      │                           │ Validate txHash,     │
     │                      │                           │ check depositAddress │
@@ -63,15 +58,15 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
     │                      │  VerifyResponse (valid)   │                      │
     │                      │<──────────────────────────│                      │
     │                      │                           │                      │
-    │                      │  9. POST /settle          │                      │
+    │                      │  8. POST /settle          │                      │
     │                      │──────────────────────────>│                      │
-    │                      │                           │ 10. POST             │
+    │                      │                           │ 9. POST             │
     │                      │                           │   /v0/deposit/submit │
     │                      │                           │─────────────────────>│
     │                      │                           │      OK              │
     │                      │                           │<─────────────────────│
     │                      │                           │                      │
-    │                      │                           │ 11. Poll GET         │
+    │                      │                           │ 10. Poll GET         │
     │                      │                           │   /v0/status         │
     │                      │                           │─────────────────────>│
     │                      │                           │  status: SUCCESS     │
@@ -82,7 +77,7 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
     │                      │ destinationChainTxHashes) │                      │
     │                      │<──────────────────────────│                      │
     │                      │                           │                      │
-    │  12. 200 OK          │                           │                      │
+    │  11. 200 OK          │                           │                      │
     │  + resource body     │                           │                      │
     │  + X-PAYMENT-RESPONSE│                           │                      │
     │<─────────────────────│                           │                      │
@@ -98,21 +93,19 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
 
 4. **Resource Server → Client**: The resource server responds `402 Payment Required` with the `PaymentRequirements` object. Critically, `payTo` is set to the 1Click `depositAddress`. The `extra` field embeds all quote metadata the client needs: the origin asset, required deposit amount, deposit memo (if any), and the quote deadline.
 
-5. **Client reviews**: The client inspects the `PaymentRequirements`, the origin asset it must deposit, the `amount` (deposit amount), the `payTo` (deposit address), slippage, and deadline, and decides whether to proceed.
+5. **Client sends deposit**: The client constructs and submits a native transaction on the origin chain, transferring the required `amount` to the `payTo` address (plus `depositMemo` if required, e.g., for Stellar).
 
-6. **Client sends deposit**: The client constructs and submits a native transaction on the origin chain, transferring the required amount to the `payTo` address (plus `depositMemo` if required, e.g., for Stellar).
+6. **Client → Resource Server**: The client resends the original request with the `X-PAYMENT` header containing a `PaymentPayload` that includes the deposit `txHash`.
 
-7. **Client → Resource Server**: The client resends the original request with the `X-PAYMENT` header containing a `PaymentPayload` that includes the deposit `txHash`.
+7. **Resource Server → Facilitator `/verify`**: The facilitator validates the payload: checks the `txHash` is well-formed, verifies `depositAddress` matches `payTo`, confirms the quote has not expired, and optionally verifies the on-chain deposit.
 
-8. **Resource Server → Facilitator `/verify`**: The facilitator validates the payload: checks the `txHash` is well-formed, verifies `depositAddress` matches `payTo`, confirms the quote has not expired, and optionally verifies the on-chain deposit.
+8. **Resource Server → Facilitator `/settle`**: Upon successful verification, the resource server calls `/settle`.
 
-9. **Resource Server → Facilitator `/settle`**: Upon successful verification, the resource server calls `/settle`.
+9. **Facilitator → 1Click API**: The facilitator calls `POST /v0/deposit/submit` with the `txHash` and `depositAddress` to notify the 1Click service and speed up processing.
 
-10. **Facilitator → 1Click API**: The facilitator calls `POST /v0/deposit/submit` with the `txHash` and `depositAddress` to notify the 1Click service and speed up processing.
+10. **Facilitator polls status**: The facilitator polls `GET /v0/status?depositAddress=<addr>[&depositMemo=<memo>]` until a terminal status: `SUCCESS`, `FAILED`, `REFUNDED`, or `INCOMPLETE_DEPOSIT`.
 
-11. **Facilitator polls status**: The facilitator polls `GET /v0/status?depositAddress=<addr>[&depositMemo=<memo>]` until a terminal status: `SUCCESS`, `FAILED`, `REFUNDED`, or `INCOMPLETE_DEPOSIT`.
-
-12. **Resource Server → Client**: On `SUCCESS`, the resource server responds `200 OK` with the requested resource and the `X-PAYMENT-RESPONSE` header containing the `SettlementResponse`.
+11. **Resource Server → Client**: On `SUCCESS`, the resource server responds `200 OK` with the requested resource and the `X-PAYMENT-RESPONSE` header containing the `SettlementResponse`.
 
 ---
 
