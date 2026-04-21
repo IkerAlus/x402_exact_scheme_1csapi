@@ -266,7 +266,7 @@ When the resource server needs to construct a `402 Payment Required` response, i
      "appFees": [...]
    }
    ```
-2. Validates the quote response has a `depositAddress` and reasonable pricing.
+2. Validates the quote response has a `depositAddress` and `maxAmountIn`.
 3. Constructs the `PaymentRequirements` with `payTo = quote.depositAddress` and embeds all quote metadata in `extra`.
 
 > **Note**: Because the quote generates a time-limited deposit address, the resource server SHOULD cache the `PaymentRequirements` for the duration of the quote's `deadline` and serve the same `depositAddress` for repeated 402 responses to the same resource, regenerating only when the deadline expires.
@@ -305,7 +305,7 @@ When the facilitator receives a `PaymentPayload`:
      "depositAddress": "<payload.depositAddress>"
    }
    ```
-   This is optional (1Click detects deposits automatically) but accelerates processing.
+   This is optional, as 1Click detects deposits automatically, but accelerates processing.
 
 2. **Poll for terminal status** via `GET {apiBaseUrl}/v0/status?depositAddress=<addr>[&depositMemo=<memo>]` at 3–5 second intervals until terminal or `maxTimeoutSeconds` is exceeded.
 
