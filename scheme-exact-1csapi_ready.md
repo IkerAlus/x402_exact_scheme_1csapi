@@ -33,7 +33,7 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
     │  4. 402 Payment      │                           │                      │
     │     Required         │                           │                      │
     │  (payTo = deposit    │                           │                      │
-    │   address, extra =   │                           │                      │
+    │   address, ra =   │                           │                      │
     │   quote metadata)    │                           │                      │
     │<─────────────────────│                           │                      │
     │                      │                           │                      │
@@ -91,7 +91,7 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
 
 3. **Facilitator → 1Click API**: `POST /v0/quote` with `dry: false` and `swapType: EXACT_OUTPUT` returns the full quote including a unique `depositAddress`, `depositMemo` (if applicable), `maxAmountIn`, `amountOut`, `deadline`, and `timeEstimate`.
 
-4. **Resource Server → Client**: The resource server responds `402 Payment Required` with the `PaymentRequirements` object. Critically, `payTo` is set to the 1Click `depositAddress`. The `extra` field embeds all quote metadata the client needs: the origin asset, required deposit amount, deposit memo (if any), and the quote deadline.
+4. **Resource Server → Client**: The resource server responds `402 Payment Required` with the `PaymentRequirements` object. Critically, `payTo` is set to the 1Click `depositAddress`. The `ra` field embeds all quote metadata the client needs: the origin asset, required deposit amount, deposit memo (if any), and the quote deadline.
 
 5. **Client sends deposit**: The client constructs and submits a native transaction on the origin chain, transferring the required `amount` to the `payTo` address (plus `depositMemo` if required, e.g., for Stellar).
 
@@ -120,7 +120,7 @@ The `exact` payment scheme for Near Intents uses the [NEAR Intents 1Click Swap A
   "payTo": "0x76b4c56085ED136a8744D52bE956396624a730E8",
                                             // 1Click deposit address (on the origin chain)
   "maxTimeoutSeconds": 300,
-  "extra": {
+  "ra": {
     "assetTransferMethod": "1click-swap",
     "originChain": "arb",                  // Short chain ID where payTo lives
     "depositMemo": "1111111",              // Required if present in quote (e.g. Stellar); null otherwise
@@ -152,7 +152,7 @@ and the full `paymentRequirements` object:
     "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Arbitrum
     "payTo": "0x76b4c56085ED136a8744D52bE956396624a730E8",
     "maxTimeoutSeconds": 300,
-    "extra": {
+    "ra": {
       "assetTransferMethod": "1click-swap",
       "originChain": "arb",
       "depositMemo": null,
@@ -179,7 +179,7 @@ and the full `paymentRequirements` object:
 | `payTo` | `quote.depositAddress` | The **1Click deposit address** on the origin chain. The client sends tokens here. |
 | `maxTimeoutSeconds` | `deadline` − now + buffer | Max time the resource server will wait for full settlement. |
 
-### Extra Field Descriptions
+### ra Field Descriptions
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -229,8 +229,8 @@ and the full `PaymentPayload` object:
 |---|---|---|---|
 | `payload.txHash` | string | Yes | Transaction hash of the client's deposit on the origin chain. This is the proof-of-deposit — analogous to the `signature` field in EVM `exact`. |
 | `payload.depositAddress` | string | Yes | Must match `payTo` from `PaymentRequirements`. Included for self-contained verification. |
-| `payload.depositMemo` | string \| null | Conditional | Must match `extra.depositMemo` from requirements. Required if non-null. |
-| `payload.originChain` | string | Yes | Must match `extra.originChain` from requirements. Identifies which chain the `txHash` belongs to. |
+| `payload.depositMemo` | string \| null | Conditional | Must match `ra.depositMemo` from requirements. Required if non-null. |
+| `payload.originChain` | string | Yes | Must match `ra.originChain` from requirements. Identifies which chain the `txHash` belongs to. |
 | `payload.clientAddress` | string | Yes | The client's address on the origin chain (sender of the deposit TX). Used for audit and on-chain verification. |
 
 ---
@@ -311,7 +311,7 @@ When the facilitator receives a `PaymentPayload`:
      "network": "near:mainnet",
      "transaction": "<destinationChainTxHashes from 1Click status>",
      "payer": "<payload.clientAddress>",
-     "exteonsions": {
+     "extensions": {
        "depositAddress": "<depositAddress>",
        "originTxHash": "<payload.txHash>",
        "nearTxHashes": ["6XqqDwoa...", "EVcgKukw..."],
