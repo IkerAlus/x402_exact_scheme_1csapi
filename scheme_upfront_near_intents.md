@@ -317,7 +317,7 @@ In the payment-proof family, proof verification **is** the security model — th
    - This confirmation MAY be performed by querying the origin chain's RPC directly, or by querying `GET /v0/status` and observing that the 1Click backend has detected the deposit (e.g., `KNOWN_DEPOSIT_TX` / `PROCESSING`). Either path satisfies the requirement; relying solely on client-asserted payload fields does not.
 
 4. **Enforce single-use** (MUST):
-   - `payload.txHash` MUST NOT have been consumed by a previous verification on this facilitator (see [Replay Prevention](#replay-prevention)).
+   - `payload.txHash` MUST NOT be already in-flight or consumed on this facilitator. On passing this check, the facilitator claims the `(depositAddress, txHash)` proof as **in-flight** (atomically, so concurrent submissions of the same proof yield at most one acceptance). The proof is permanently consumed only when settlement reaches a terminal state — verification alone does not burn it (see [Replay Prevention](#replay-prevention)).
 
 5. **Return `VerifyResponse`**:
    ```jsonc
@@ -388,6 +388,10 @@ Concretely, the facilitator:
    }
    ```
 
+4. **Consumes the proof on any terminal status**: once settlement reaches a terminal state (`SUCCESS`, `FAILED`, `REFUNDED`, or `INCOMPLETE_DEPOSIT`), the facilitator permanently consumes the in-flight `(depositAddress, txHash)` proof(s). After a terminal state the quote and its deposit address are spent — the deposit was either delivered or refunded — so the same proof MUST NOT be accepted again.
+
+**Client recovery.** A non-success terminal state is terminal for this payment: the deposit is refunded to `extra.refundTo`, and because the quote and deposit address are single-use, the same `txHash` cannot be retried. To pay again, the client re-requests the resource: the resulting fresh `402` carries new `PaymentRequirements` (a new quote, hence a new deposit address), against which the client makes a new deposit and presents a new proof. Burning the original proof is therefore safe — it can never deliver the resource, and the funds it represents have been refunded.
+
 ### Finality Definition
 
 Methods in the payment-proof family must state what "payment is final before the route handler executes" means. `1click-swap` has two candidate finality boundaries:
@@ -442,7 +446,7 @@ The facilitator MUST maintain transient state for active quotes, keyed by `depos
 | `QuoteResponse` | Quote time | Full 1Click quote response |
 | `paymentRequirements` | Quote time | The PaymentRequirements served to the client |
 | `deadline` | Quote time | Quote expiry |
-| `txHashes` | Verify time | Set of consumed deposit TX hashes for this address (proof tracking) |
+| `txHashes` | Verify time | Deposit TX hashes for this address with lifecycle status: `in-flight` (claimed at verification) or `consumed` (terminal settlement state reached) — see [Replay Prevention](#replay-prevention) |
 | `clientAddress` | Verify time | Client's origin chain address |
 | `settlementStatus` | Settle time | Last observed 1Click status |
 
@@ -470,7 +474,7 @@ How this method satisfies the four properties every `upfront` implementation MUS
 - Each quote generates a **unique `depositAddress`** which serves as a natural nonce.
 - A given `depositAddress` can only be used for one swap — the 1Click backend rejects duplicate deposits.
 - The facilitator MUST reject payloads where `depositAddress` does not correspond to an active, non-expired, non-settled quote in its state.
-- The facilitator MUST additionally track consumed payment proofs: each `(depositAddress, txHash)` pair MUST be accepted at most once. A payload presenting a `txHash` already consumed — for the same or a different resource — MUST be rejected with `invalid_upfront_1click_proof_reused`.
+- The facilitator MUST additionally track payment proofs through a two-phase lifecycle: each `(depositAddress, txHash)` pair is claimed **in-flight** at verification (atomically, so concurrent requests bearing the same proof result in at most one settlement) and is **permanently consumed only when settlement reaches a terminal state**. A proof is never burned before its outcome is known — a transient verification-then-abandonment does not strand it — and is never reusable afterward. A payload presenting a `txHash` that is already in-flight or consumed — for the same or a different resource — MUST be rejected with `invalid_upfront_1click_proof_reused`. On a non-success terminal state the client recovers with a fresh challenge (see Client recovery under [Settlement](#settlement-post-settle-pre-execution)).
 - **Multiple deposits to one address**: the 1Click backend aggregates deposits to the same address (e.g., a top-up after an initial under-deposit). The facilitator MAY accept a payload whose `txHash` is any one of the aggregated deposit transactions, provided the aggregate meets `minAmountIn`; each individual `txHash` is still single-use.
 
 ### Authorization Scope
@@ -510,6 +514,16 @@ The resource server only ever observes terminal states; intermediate states neve
 - The facilitator MUST NOT relay deposit addresses from untrusted sources.
 - Clients interacting with an untrusted resource server bear the risk of sending funds to a malicious address — this is the same trust model as any payment gateway integration. Because the client pays first under `upfront`, clients SHOULD apply heightened scrutiny to the resource server's identity before depositing.
 
+### Compliance Screening
+
+Under post-execution-settlement schemes, a server can screen and reject a request before any funds move. Under `upfront`, the client pays first — so screening moves to **challenge issuance**. The resource server and facilitator decide whether to advertise a payment path at all: any screening of the requester, resource, or destination SHOULD be performed **before** issuing `PaymentRequirements`, because not issuing a quote means no deposit address exists and no funds can move.
+
+Implementers should understand what is and is not possible after that point:
+
+- Once a deposit arrives at the deposit address, the settlement backend detects and executes the swap **automatically**; neither the facilitator nor the resource server has a post-deposit interdiction point. Declining to call `/settle` does not stop the swap — it only leaves the resource server unaware of the outcome.
+- A resource server that declines, on policy grounds, to serve a resource after settlement has succeeded is in the post-settlement non-service case ([Refunds](#refunds)): the merchant has been paid and any remediation is out of protocol. This is precisely why screening MUST NOT be deferred past quote issuance.
+- The automatic refund path covers settlement failures, not screening decisions: it returns funds when the swap cannot complete, and does so to the client-designated `refundTo` without custodial discretion.
+
 ### Latency and Long-Running Settlement
 
 Because settlement (destination delivery) sits in the critical path before the route handler, the synchronous HTTP 402 flow blocks for the swap duration: typically under `timeEstimate` (~2 minutes for EVM/Solana origins) but potentially much longer for slow-finality origins (e.g., Bitcoin). Resource servers SHOULD:
@@ -528,7 +542,12 @@ The `upfront` scheme defines refunds as out of protocol: servers MAY offer them,
 - Excess deposited above the quoted requirement is refunded to `refundTo`.
 - The refund covers the deposited origin asset; origin-chain network fees paid by the client are not recoverable.
 
-Note that automatic refunds cover **settlement failure** (the payment leg). Failure of the resource itself after successful settlement — i.e., the route handler errors after the merchant has been paid — remains out of protocol, exactly as for all other `upfront` methods.
+Client exposure under this method therefore splits into two distinct failure classes, which clients and agent risk policies SHOULD reason about separately rather than treating all pre-paid flows as equivalently exposed:
+
+- **(a) Settlement failure** — the payment leg does not complete (`FAILED`, `INCOMPLETE_DEPOSIT`, deadline missed, `REFUNDED`). Covered by the automatic, backend-enforced refund to `refundTo`; the client's residual loss is limited to origin-chain network fees.
+- **(b) Post-settlement non-service** — the route handler fails or the server declines to serve **after** the merchant has been paid. Out of protocol, exactly as for every other `upfront` method; servers MAY offer remediation but clients MUST NOT assume it.
+
+This method eliminates class (a) as an unremedied risk; only class (b) — common to the entire scheme — remains.
 
 ---
 
@@ -648,11 +667,3 @@ Client-side handling of this method is deliberately close to a plain on-chain tr
 3. **Payment**: Construct a native transfer of `amount` of `asset` to `payTo` (attaching `extra.depositMemo` where non-null), submit it before `extra.deadline`, and record the transaction hash.
 4. **Proof presentation**: Retry the request with the `PaymentPayload` carrying `txHash` as the payment proof. No off-chain signature is constructed; the client's only signature is the deposit transaction itself.
 5. **Timeouts**: Set the HTTP client timeout from `maxTimeoutSeconds`, and expect settlement latency on the order of `extra.timeEstimate`.
-
----
-
-## Version History
-
-| Version | Date       | Changes       | Authors                 |
-| ------- | ---------- | ------------- | ----------------------- |
-| v1.0    | 2026-06-12 | Initial draft | @IkerAlus               |
